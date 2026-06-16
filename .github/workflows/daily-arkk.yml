@@ -2,8 +2,8 @@ name: Daily ARKK Holdings Download
 
 on:
   schedule:
-    - cron: '0 12 * * *'   # Runs at 20:00 HKT daily (12:00 UTC)
-  workflow_dispatch:       # Allows manual trigger from GitHub UI
+    - cron: '0 12 * * *'   # 20:00 HKT
+  workflow_dispatch:
 
 jobs:
   download:
@@ -12,20 +12,32 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-      
-    - name: Set up Python 3.11.5
-      uses: actions/setup-python@v5
       with:
-        python-version: '3.11.5'   # Exact version you want
+        token: ${{ secrets.GITHUB_TOKEN }}   # Important for push permissions
+    
+    - name: Set up Python 3.11.5
+      uses: actions/setup-python@v5   # This already supports Node 24
+      with:
+        python-version: '3.11.5'
     
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
-    - name: Install Playwright Browsers & Dependencies
-      run: |
-        playwright install --with-deps chromium   # Only Chromium + system deps
+    - name: Cache Playwright Browsers
+      uses: actions/cache@v4
+      id: playwright-cache
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ runner.os }}-playwright-${{ hashFiles('requirements.txt') }}
+    
+    - name: Install Playwright Chromium
+      if: steps.playwright-cache.outputs.cache-hit != 'true'
+      run: playwright install --with-deps chromium
+    
+    - name: Install Playwright System Dependencies
+      run: playwright install-deps chromium
     
     - name: Run dl_arkk.py
       run: python dl_arkk.py
@@ -34,6 +46,6 @@ jobs:
       run: |
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
-        git add "*.csv" "**/*.csv"   # Adjust if your files are in subfolders
+        git add "*.csv" "**/*.csv"
         git commit -m "Daily ARKK update: $(date -u)" || echo "No changes to commit"
         git push
